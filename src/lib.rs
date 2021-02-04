@@ -40,15 +40,21 @@ pub struct CircuitBreaker<P, T> {
 }
 impl <P, T> CircuitBreaker<P, T> {
     /// Creates a new CircuitBreaker instance.
-    pub fn new(name: &str, function: fn(P) -> Result<T, Box<dyn Error>>) -> CircuitBreaker<P, T> {
+    pub fn new(
+        name: &str,
+        function: fn(P) -> Result<T, Box<dyn Error>>,
+        threshold: Option<usize>,
+        timeout: Option<Duration>) -> CircuitBreaker<P, T> {
+
         debug!("[CircuitBreaker::new({})]", name);
+
         CircuitBreaker {
             name: String::from(name),
             function,
             failure_count: 0,
             status: CircuitState::Close,
-            threshold: 5,
-            timeout: Duration::new(5, 0),
+            threshold: if let Some(t) = threshold { t } else { 5 },
+            timeout: if let Some(d) = timeout { d } else { Duration::new(5, 0) },
             time_of_tripping: None
         }
     }
@@ -141,6 +147,7 @@ impl <P, T> CircuitBreaker<P, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::thread::sleep;
 
     #[derive(Error, Debug)]
     enum TestError {
@@ -162,7 +169,7 @@ mod tests {
 
     #[test]
     fn successful_execute() {
-        let mut cb = CircuitBreaker::new("successful_execute", success);
+        let mut cb = CircuitBreaker::new("successful_execute", success, None, None);
         match cb.execute("Hello") {
             Ok(msg) => {
                 assert_eq!("Hello", msg);
@@ -178,11 +185,43 @@ mod tests {
 
     #[test]
     fn unsuccessful_execute() {
-        let mut cb = CircuitBreaker::new("unsuccessful_execute", fail);
+        let mut cb = CircuitBreaker::new("unsuccessful_execute", fail, None, None);
         match cb.execute(true) {
             Ok(_) => panic!("Unexpected successful execution!"),
             //Err(TestError::ExpectedFailure) => debug!("Expected failure!"),
             Err(error) => debug!("Expected error: {}", error)
+        }
+    }
+
+    #[test]
+    fn recover_execute() {
+        let mut cb = CircuitBreaker::new("recover_execute", fail, Some(1), Some(Duration::new(1, 0)));
+        // Everything is fine
+        match cb.execute(false) {
+            Ok(_) => assert_eq!(CircuitState::Close, cb.status),
+            Err(err) => panic!("Unexpected error: {}", err)
+        }
+        // One failure is no failure!
+        match cb.execute(true) {
+            Ok(_) => panic!("Unexpected success!"),
+            Err(_) => assert_eq!(CircuitState::Close, cb.status)
+        }
+        // Now the threshold steps in!
+        match cb.execute(true) {
+            Ok(_) => panic!("Unexpected success!"),
+            Err(_) => assert_eq!(CircuitState::Open, cb.status)
+        }
+        // Still in the within the timeout period! The successful function is not even called.
+        for _i in 1..10 {
+            match cb.execute(false) {
+                Ok(_) => panic!("Unexpected success!"),
+                Err(_) => assert_eq!(CircuitState::Open, cb.status)
+            }
+        }
+        sleep(cb.timeout);
+        match cb.execute(false) {
+            Ok(_) => assert_eq!(CircuitState::Close, cb.status),
+            Err(err) => panic!("Unexpected error: {}", err)
         }
     }
 }
