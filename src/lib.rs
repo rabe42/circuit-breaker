@@ -153,16 +153,10 @@ mod tests {
         Ok(String::from(parameter))
     }
 
-    fn failure(_parameter: &str) -> Result<String, Box<dyn Error>> {
-        Err(Box::new(TestError::ExpectedFailure))
-    }
-
-    fn failure_on(param: (usize, usize)) -> Result<usize, Box<dyn Error>> {
-        if param.0 < param.1 {
-            Ok(param.0)
-        }
-        else {
-            Err(Box::new(TestError::ExpectedFailure))
+    fn fail(should_fail: bool) -> Result<&'static str, Box<dyn Error>> {
+        match should_fail {
+            true => Err(Box::new(TestError::ExpectedFailure)),
+            false => Ok("Don't fail")
         }
     }
 
@@ -184,8 +178,8 @@ mod tests {
 
     #[test]
     fn unsuccessful_execute() {
-        let mut cb = CircuitBreaker::new("unsuccessful_execute", failure);
-        match cb.execute("Hello") {
+        let mut cb = CircuitBreaker::new("unsuccessful_execute", fail);
+        match cb.execute(true) {
             Ok(_) => panic!("Unexpected successful execution!"),
             //Err(TestError::ExpectedFailure) => debug!("Expected failure!"),
             Err(error) => debug!("Expected error: {}", error)
