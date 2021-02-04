@@ -100,7 +100,8 @@ impl <P, T> CircuitBreaker<P, T> {
             },
             Err(error) => {
                 self.failure_count += 1;
-                warn!("[CircuitBreaker::handle_close({})] Function call failed {} times.", self.name, self.failure_count);
+                warn!("[CircuitBreaker::handle_close({})] Function call failed {} times.",
+                    self.name, self.failure_count);
                 if self.failure_count > self.threshold {
                     self.trip();
                 }
