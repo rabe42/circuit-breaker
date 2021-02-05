@@ -4,6 +4,9 @@ use log::{debug, warn, info, error, trace};
 use thiserror::Error;
 
 
+///
+/// The error object, returned, if the circuit breaker has to do its job.
+///
 #[derive(Error, Debug)]
 pub enum CircuitBreakerError {
     #[error("The circuit breaker '{0}' will stay open.")]
@@ -40,6 +43,10 @@ pub struct CircuitBreaker<P, T> {
 }
 impl <P, T> CircuitBreaker<P, T> {
     /// Creates a new CircuitBreaker instance.
+    /// @param name The name of the circuite breaker, for logging/debugging purposes.
+    /// @param function The function, which will be wrapped by the circuit breaker.
+    /// @param threshold The number of consecutive failures, which trip the circuit breaker.
+    /// @param timeout The time before the circuit breaker isn't changing back to the close status.
     pub fn new(
         name: &str,
         function: fn(P) -> Result<T, Box<dyn Error>>,
@@ -60,6 +67,8 @@ impl <P, T> CircuitBreaker<P, T> {
     }
 
     /// Try to execute and count the failures here.
+    /// Any error returned by the embedded function will be propagated to the callee.
+    /// In addition CircuteBreakerError might be thrown.
     pub fn execute(&mut self, parameter: P) -> Result<T, Box<dyn Error>> {
         debug!("[CircuitBreaker::execute({})]", self.name);
         match self.status {
