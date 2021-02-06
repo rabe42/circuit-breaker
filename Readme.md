@@ -20,9 +20,19 @@ The first call after the timeout duration will set the circuit breaker into the 
 
 If the function fails again. The time of the last failure is stored and the function not called before the end of the timeout.
 
+## Logging
+The lo
+
 ## Defaults
 * The default for the threshold is 5.
 * The default of the timeout is 5s.
+
+## Instantiation
+To wrap a function with the circuti breaker, you call the new constructor.
+``` rust
+    let mut cb = CircuitBreaker::new("simple", action, None, None);
+```
+The first parameter give the circuit breker a name. This will be used in logging.
 
 # Example
 ```
