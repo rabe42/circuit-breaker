@@ -3,7 +3,6 @@ use std::time::{Duration, SystemTime};
 use log::{debug, warn, info, error, trace};
 use thiserror::Error;
 
-
 ///
 /// The error object, returned, if the circuit breaker has to do its job.
 ///
