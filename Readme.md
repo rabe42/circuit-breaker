@@ -38,6 +38,11 @@ The first parameter give the circuit breker a name. This will be used in logging
 ```
 
 # Example
+
+To run the example enter on the command line:
+```
+ RUST_LOG=INFO cargo run --example simple
+```
 ```
 fn main() ...
 ```
