@@ -8,6 +8,12 @@ use thiserror::Error;
 ///
 #[derive(Error, Debug)]
 pub enum CircuitBreakerError {
+    /// The name of the circuit breaker can be extracted from this error. It is returned,
+    /// if the circuit breaker opens the connection.
+    #[error("The circuit breaker '{0}' tripped to open due to {:?}.")]
+    Tripped(String, Box<dyn Error>),
+    /// The name of the circuit breaker can be extracted from this error. It is returned,
+    /// if the circuit breaker stays open.
     #[error("The circuit breaker '{0}' will stay open.")]
     StaysOpen(String)
 }
@@ -111,7 +117,7 @@ impl <P, T> ThresholdBreaker<P, T> {
                 warn!("[CircuitBreaker::handle_close({})] Function call failed {} times.",
                     self.name, self.failure_count);
                 if self.failure_count > self.threshold {
-                    self.trip();
+                    return self.trip(error);
                 }
                 Err(error)
             }
@@ -131,8 +137,7 @@ impl <P, T> ThresholdBreaker<P, T> {
             }
             Err(error) => {
                 warn!("[CircuitBreaker::handle_half_open({})] Still not going to open!", self.name);
-                self.trip();
-                Err(error)
+                return self.trip(error)
             }
         }
     }
@@ -146,10 +151,11 @@ impl <P, T> ThresholdBreaker<P, T> {
     }
 
     /// Setting the circuit breaker into the open state.
-    fn trip(&mut self) {
+    fn trip(&mut self, error: Box<dyn Error>) -> Result<T, Box<dyn Error>> {
         error!("[CircuitBreaker::trip({})]", self.name);
         self.status = CircuitState::Open;
         self.time_of_tripping = Some(SystemTime::now());
+        Err(Box::new(CircuitBreakerError::Tripped(String::from(&self.name), error)))
     }
 }
 
