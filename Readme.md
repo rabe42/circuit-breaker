@@ -37,13 +37,26 @@ The first parameter give the circuit breker a name. This will be used in logging
     fn (P) -> Result<T, Box<dyn Error>>
 ```
 
+## Executing the wrapped function.
+The circuit breaker manages an internal state. The wrapped function can be simply called like so:
+``` rust
+    match cb.execute(parameter) {
+        Ok(result_of_the_function) => { /* Use the result of the wraped function here*/ },
+        Err(error) => { /* One of the error occured might be the one 
+            that the circuit breaker tripped. */ }
+    }
+```
+
 # Example
 
 To run the example enter on the command line:
 ```
  RUST_LOG=INFO cargo run --example simple
 ```
+
+You may find a simple example about the use of the circuit breaker in the examples directory:
+
 ```
-fn main() ...
+./examples/simple.rs
 ```
 
