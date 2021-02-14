@@ -16,7 +16,7 @@ pub enum CircuitBreakerError {
 /// The three states of the CircuitBreaker.
 ///
 #[derive(Debug, PartialEq)]
-pub enum CircuitState {
+enum CircuitState {
     Open, Close, HalfOpen
 }
 
@@ -24,7 +24,7 @@ pub enum CircuitState {
 /// The CircuitBreaker is implementing the protection pattern for distributed services.
 /// It is basically used in my case to protect the service from database failures.
 ///
-pub struct CircuitBreaker<P, T> {
+pub struct ThresholdBreaker<P, T> {
     /// The name of this breaker to better identify it in the locks.
     name: String,
     /// The function to be executed.
@@ -40,7 +40,7 @@ pub struct CircuitBreaker<P, T> {
     /// The point in time, when the circuit was opened.
     time_of_tripping: Option<SystemTime>
 }
-impl <P, T> CircuitBreaker<P, T> {
+impl <P, T> ThresholdBreaker<P, T> {
     /// Creates a new CircuitBreaker instance.
     /// @param name The name of the circuite breaker, for logging/debugging purposes.
     /// @param function The function, which will be wrapped by the circuit breaker.
@@ -50,11 +50,11 @@ impl <P, T> CircuitBreaker<P, T> {
         name: &str,
         function: fn(P) -> Result<T, Box<dyn Error>>,
         threshold: Option<usize>,
-        timeout: Option<Duration>) -> CircuitBreaker<P, T> {
+        timeout: Option<Duration>) -> ThresholdBreaker<P, T> {
 
         debug!("[CircuitBreaker::new({})]", name);
 
-        CircuitBreaker {
+        ThresholdBreaker {
             name: String::from(name),
             function,
             failure_count: 0,
@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn successful_execute() {
-        let mut cb = CircuitBreaker::new("successful_execute", success, None, None);
+        let mut cb = ThresholdBreaker::new("successful_execute", success, None, None);
         match cb.execute("Hello") {
             Ok(msg) => {
                 assert_eq!("Hello", msg);
@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn unsuccessful_execute() {
-        let mut cb = CircuitBreaker::new("unsuccessful_execute", fail, None, None);
+        let mut cb = ThresholdBreaker::new("unsuccessful_execute", fail, None, None);
         match cb.execute(true) {
             Ok(_) => panic!("Unexpected successful execution!"),
             //Err(TestError::ExpectedFailure) => debug!("Expected failure!"),
@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn recover_execute() {
-        let mut cb = CircuitBreaker::new("recover_execute", fail, Some(1), Some(Duration::new(1, 0)));
+        let mut cb = ThresholdBreaker::new("recover_execute", fail, Some(1), Some(Duration::new(1, 0)));
         // Everything is fine
         match cb.execute(false) {
             Ok(_) => assert_eq!(CircuitState::Close, cb.status),

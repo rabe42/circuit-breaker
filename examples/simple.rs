@@ -1,5 +1,5 @@
 use env_logger;
-use circuit_breaker::CircuitBreaker;
+use circuit_breaker::ThresholdBreaker;
 use log::{info};
 use std::time::Duration;
 use std::error::Error;
@@ -25,7 +25,7 @@ fn action(should_fail: bool) -> Result<(), Box<dyn Error>> {
 fn main() {
     env_logger::init();
 
-    let mut cb = CircuitBreaker::new("simple", action, Some(1), Some(Duration::new(1, 0)));
+    let mut cb = ThresholdBreaker::new("simple", action, Some(1), Some(Duration::new(1, 0)));
     // Everything is fine
     match cb.execute(false) {
         Ok(_) => info!("Everything is fine!"),

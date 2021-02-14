@@ -30,7 +30,11 @@ The logging is established for this crate, using the log crate. Each circuit bre
 ## Instantiation
 To wrap a function with the circuti breaker, you call the new constructor.
 ``` rust
-    let mut cb = CircuitBreaker::new("simple", action, None, None);
+use circuit_breaker::ThresholdBreaker;
+
+...
+
+    let mut cb = ThresholdBreaker::new("simple", action, None, None);
 ```
 The first parameter give the circuit breker a name. This will be used in logging. The second parameter is the function, which has to have the folowing signature:
 ``` rust
