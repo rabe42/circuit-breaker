@@ -8,7 +8,7 @@ keywords = ["circuit_breaker", "decoupling"]
 categories = ["network-programming"]
 description = "Development of the vanilla circuit breaker, describe by T. Nygard."
 homepage = "To Be Defined"
-repository = "https://github.com/rabe42/... To be Defined"
+repository = "https://github.com/rabe42/circuit-breaker"
 readme = "Readme.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
