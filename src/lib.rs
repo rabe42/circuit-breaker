@@ -32,7 +32,7 @@ enum CircuitState {
 }
 
 trait CircuitBreaker<P, R, E=Box<dyn Error>> {
-    fn execute(&mut self, parameter: P) -> Result<R, E>;
+    fn call(&mut self, parameter: P) -> Result<R, E>;
 }
 
 ///
@@ -83,7 +83,7 @@ impl <P, R, E: Error> ThresholdBreaker<P, R, E> {
     /// Try to execute and count the failures here.
     /// Any error returned by the embedded function will be propagated to the callee.
     /// In addition CircuteBreakerError might be thrown.
-    pub fn execute(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>> {
+    pub fn call(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>> {
         debug!("[CircuitBreaker::execute({})]", self.name);
         match self.status {
             CircuitState::Open => self.handle_open(parameter),
@@ -101,7 +101,7 @@ impl <P, R, E: Error> ThresholdBreaker<P, R, E> {
         let time_of_tripping = if let Some(tot) = self.time_of_tripping { tot } else { now };
         if now > time_of_tripping + self.timeout {
             self.status = CircuitState::HalfOpen;
-            self.execute(parameter)
+            self.call(parameter)
         }
         else {
             debug!("[CircuitBreaker::handle_open({})] stays open!", self.name);
@@ -194,14 +194,14 @@ mod tests {
     #[test]
     fn successful_execute() {
         let mut cb = ThresholdBreaker::new("successful_execute", success, None, None);
-        match cb.execute("Hello") {
+        match cb.call("Hello") {
             Ok(msg) => {
                 assert_eq!("Hello", msg);
                 assert_eq!(CircuitState::Close, cb.status);
             },
             Err(err) => panic!("Unexpected failure: {}!", err)
         }
-        match cb.execute("World") {
+        match cb.call("World") {
             Ok(msg) => assert_eq!("World", msg),
             Err(err) => panic!("Unexpected failure: {}!", err)
         }
@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn unsuccessful_execute() {
         let mut cb = ThresholdBreaker::new("unsuccessful_execute", fail, None, None);
-        match cb.execute(true) {
+        match cb.call(true) {
             Ok(_) => panic!("Unexpected successful execution!"),
             //Err(TestError::ExpectedFailure) => debug!("Expected failure!"),
             Err(error) => debug!("Expected error: {}", error)
@@ -221,29 +221,29 @@ mod tests {
     fn recover_execute() {
         let mut cb = ThresholdBreaker::new("recover_execute", fail, Some(1), Some(Duration::new(1, 0)));
         // Everything is fine
-        match cb.execute(false) {
+        match cb.call(false) {
             Ok(_) => assert_eq!(CircuitState::Close, cb.status),
             Err(err) => panic!("Unexpected error: {}", err)
         }
         // One failure is no failure!
-        match cb.execute(true) {
+        match cb.call(true) {
             Ok(_) => panic!("Unexpected success!"),
             Err(_) => assert_eq!(CircuitState::Close, cb.status)
         }
         // Now the threshold steps in!
-        match cb.execute(true) {
+        match cb.call(true) {
             Ok(_) => panic!("Unexpected success!"),
             Err(_) => assert_eq!(CircuitState::Open, cb.status)
         }
         // Still in the within the timeout period! The successful function is not even called.
         for _i in 1..10 {
-            match cb.execute(false) {
+            match cb.call(false) {
                 Ok(_) => panic!("Unexpected success!"),
                 Err(_) => assert_eq!(CircuitState::Open, cb.status)
             }
         }
         sleep(cb.timeout);
-        match cb.execute(false) {
+        match cb.call(false) {
             Ok(_) => assert_eq!(CircuitState::Close, cb.status),
             Err(err) => panic!("Unexpected error: {}", err)
         }
