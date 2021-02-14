@@ -7,7 +7,7 @@ license = "Apache-2.0"
 keywords = ["circuit_breaker", "decoupling"]
 categories = ["network-programming"]
 description = "Development of the vanilla circuit breaker, describe by T. Nygard."
-homepage = "To Be Defined"
+homepage = "https://github.com/rabe42/circuit-breaker"
 repository = "https://github.com/rabe42/circuit-breaker"
 readme = "Readme.md"
 
