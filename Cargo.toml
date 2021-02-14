@@ -3,6 +3,13 @@ name = "circuit-breaker"
 version = "0.1.0"
 authors = ["Dr. Ralf Berger <dr.ralf.berger@gmail.com>"]
 edition = "2018"
+license = "Apache-2.0"
+keywords = ["circuit_breaker", "decoupling"]
+categories = ["network-programming"]
+description = "Development of the vanilla circuit breaker, describe by T. Nygard."
+homepage = "To Be Defined"
+repository = "https://github.com/rabe42/... To be Defined"
+readme = "Readme.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
