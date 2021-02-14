@@ -2,7 +2,6 @@ use env_logger;
 use circuit_breaker::ThresholdBreaker;
 use log::{info};
 use std::time::Duration;
-use std::error::Error;
 use thiserror::Error;
 use std::thread::sleep;
 
@@ -15,9 +14,9 @@ enum ActionError {
 
 
 /// An action doing normally something, which might fail.
-fn action(should_fail: bool) -> Result<(), Box<dyn Error>> {
+fn action(should_fail: bool) -> Result<(), ActionError> {
     match should_fail {
-        true => Err(Box::new(ActionError::Fail)),
+        true => Err(ActionError::Fail),
         false => Ok(())
     }
 }

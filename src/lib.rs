@@ -2,16 +2,21 @@ use std::error::Error;
 use std::time::{Duration, SystemTime};
 use log::{debug, warn, info, error, trace};
 use thiserror::Error;
+use std::fmt::Debug;
 
 ///
 /// The error object, returned, if the circuit breaker has to do its job.
 ///
 #[derive(Error, Debug)]
-pub enum CircuitBreakerError {
+pub enum CircuitBreakerError<E: Error> {
+    /// Returned, if the wrapped function failed with an generic error.
+    /// This error should be extracted, if of interest.
+    #[error("The wrapped function failed with.")]
+    Failed(E),
     /// The name of the circuit breaker can be extracted from this error. It is returned,
     /// if the circuit breaker opens the connection.
-    #[error("The circuit breaker '{0}' tripped to open due to {:?}.")]
-    Tripped(String, Box<dyn Error>),
+    #[error("The circuit breaker '{0}' tripped to open.")]
+    Tripped(String, E),
     /// The name of the circuit breaker can be extracted from this error. It is returned,
     /// if the circuit breaker stays open.
     #[error("The circuit breaker '{0}' will stay open.")]
@@ -26,15 +31,19 @@ enum CircuitState {
     Open, Close, HalfOpen
 }
 
+trait CircuitBreaker<P, R, E=Box<dyn Error>> {
+    fn execute(&mut self, parameter: P) -> Result<R, E>;
+}
+
 ///
 /// The CircuitBreaker is implementing the protection pattern for distributed services.
 /// It is basically used in my case to protect the service from database failures.
 ///
-pub struct ThresholdBreaker<P, T> {
+pub struct ThresholdBreaker<P, R, E: Error> {
     /// The name of this breaker to better identify it in the locks.
     name: String,
     /// The function to be executed.
-    function: fn(P) -> Result<T, Box<dyn Error>>,
+    function: fn(P) -> Result<R, E>,
     /// The current count of failures. Will be resetted by success.
     failure_count: usize,
     /// The current state of the circuite breaker
@@ -46,7 +55,7 @@ pub struct ThresholdBreaker<P, T> {
     /// The point in time, when the circuit was opened.
     time_of_tripping: Option<SystemTime>
 }
-impl <P, T> ThresholdBreaker<P, T> {
+impl <P, R, E: Error> ThresholdBreaker<P, R, E> {
     /// Creates a new CircuitBreaker instance.
     /// @param name The name of the circuite breaker, for logging/debugging purposes.
     /// @param function The function, which will be wrapped by the circuit breaker.
@@ -54,10 +63,10 @@ impl <P, T> ThresholdBreaker<P, T> {
     /// @param timeout The time before the circuit breaker isn't changing back to the close status.
     pub fn new(
         name: &str,
-        function: fn(P) -> Result<T, Box<dyn Error>>,
+        function: fn(P) -> Result<R, E>,
         threshold: Option<usize>,
-        timeout: Option<Duration>) -> ThresholdBreaker<P, T> {
-
+        timeout: Option<Duration>) -> ThresholdBreaker<P, R, E>
+    {
         debug!("[CircuitBreaker::new({})]", name);
 
         ThresholdBreaker {
@@ -74,7 +83,7 @@ impl <P, T> ThresholdBreaker<P, T> {
     /// Try to execute and count the failures here.
     /// Any error returned by the embedded function will be propagated to the callee.
     /// In addition CircuteBreakerError might be thrown.
-    pub fn execute(&mut self, parameter: P) -> Result<T, Box<dyn Error>> {
+    pub fn execute(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>> {
         debug!("[CircuitBreaker::execute({})]", self.name);
         match self.status {
             CircuitState::Open => self.handle_open(parameter),
@@ -86,7 +95,7 @@ impl <P, T> ThresholdBreaker<P, T> {
     /// Handle the case if the circuit is open (tripped).
     /// It just checks, if the time is up. If not, it just returns an CircuitBreakerError.
     /// Moves to HalfOpen and calling execute otherwise.
-    fn handle_open(&mut self, parameter: P) -> Result<T, Box<dyn Error>> {
+    fn handle_open(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>> {
         debug!("[CircuitBreaker::handle_open({})]", self.name);
         let now = SystemTime::now();
         let time_of_tripping = if let Some(tot) = self.time_of_tripping { tot } else { now };
@@ -96,7 +105,7 @@ impl <P, T> ThresholdBreaker<P, T> {
         }
         else {
             debug!("[CircuitBreaker::handle_open({})] stays open!", self.name);
-            Err(Box::new(CircuitBreakerError::StaysOpen(String::from(&self.name))))
+            Err(CircuitBreakerError::StaysOpen(String::from(&self.name)))
         }
     }
 
@@ -104,7 +113,7 @@ impl <P, T> ThresholdBreaker<P, T> {
     /// In this case it tries to execute the function with the provided parameters.
     /// If this fails, it will increase the failure counter, if the threshold reached,
     /// it will trip().
-    fn handle_close(&mut self, parameter: P) -> Result<T, Box<dyn Error>> {
+    fn handle_close(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>> {
         debug!("[CircuitBreaker::handle_close({})]", self.name);
         match (self.function)(parameter) {
             Ok(result) => {
@@ -119,7 +128,7 @@ impl <P, T> ThresholdBreaker<P, T> {
                 if self.failure_count > self.threshold {
                     return self.trip(error);
                 }
-                Err(error)
+                Err(CircuitBreakerError::Failed(error))
             }
         }
     }
@@ -127,7 +136,7 @@ impl <P, T> ThresholdBreaker<P, T> {
     /// Handle the HalfOpen state. This is the state, after a Open state.
     /// It executes the function with the provided parameters. If this is successful,
     /// it goes to the close state. It trip() again otherwise.
-    fn handle_half_open(&mut self, parameter: P) -> Result<T, Box<dyn Error>> {
+    fn handle_half_open(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>> {
         debug!("[CircuitBreaker::handle_half_open({})]", self.name);
         match (self.function)(parameter) {
             Ok(result) => {
@@ -151,11 +160,11 @@ impl <P, T> ThresholdBreaker<P, T> {
     }
 
     /// Setting the circuit breaker into the open state.
-    fn trip(&mut self, error: Box<dyn Error>) -> Result<T, Box<dyn Error>> {
+    fn trip(&mut self, error: E) -> Result<R, CircuitBreakerError<E>> {
         error!("[CircuitBreaker::trip({})]", self.name);
         self.status = CircuitState::Open;
         self.time_of_tripping = Some(SystemTime::now());
-        Err(Box::new(CircuitBreakerError::Tripped(String::from(&self.name), error)))
+        Err(CircuitBreakerError::Tripped(String::from(&self.name), error))
     }
 }
 
@@ -170,14 +179,14 @@ mod tests {
         ExpectedFailure
     }
 
-    fn success(parameter: &str) -> Result<String, Box<dyn Error>> {
+    fn success(parameter: &str) -> Result<String, TestError> {
         debug!("[tests::success()] {}", parameter);
         Ok(String::from(parameter))
     }
 
-    fn fail(should_fail: bool) -> Result<&'static str, Box<dyn Error>> {
+    fn fail(should_fail: bool) -> Result<&'static str, TestError> {
         match should_fail {
-            true => Err(Box::new(TestError::ExpectedFailure)),
+            true => Err(TestError::ExpectedFailure),
             false => Ok("Don't fail")
         }
     }
