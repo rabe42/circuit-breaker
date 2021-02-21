@@ -31,8 +31,11 @@ enum CircuitState {
     Open, Close, HalfOpen
 }
 
-trait CircuitBreaker<P, R, E=Box<dyn Error>> {
-    fn call(&mut self, parameter: P) -> Result<R, E>;
+///
+/// This is the trait, which implements the call to the wrapped function.
+/// 
+pub trait CircuitBreaker<P, R, E: Error> {
+    fn call(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>>;
 }
 
 ///
@@ -54,6 +57,19 @@ pub struct ThresholdBreaker<P, R, E: Error> {
     timeout: Duration,
     /// The point in time, when the circuit was opened.
     time_of_tripping: Option<SystemTime>
+}
+impl <P, R, E:Error> CircuitBreaker<P, R, E>  for ThresholdBreaker<P, R, E>  {
+    /// Try to execute and count the failures here.
+    /// Any error returned by the embedded function will be propagated to the callee.
+    /// In addition CircuteBreakerError might be thrown.
+    fn call(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>> {
+        debug!("[CircuitBreaker::execute({})]", self.name);
+        match self.status {
+            CircuitState::Open => self.handle_open(parameter),
+            CircuitState::Close => self.handle_close(parameter),
+            CircuitState::HalfOpen => self.handle_half_open(parameter)
+        }
+    }
 }
 impl <P, R, E: Error> ThresholdBreaker<P, R, E> {
     /// Creates a new CircuitBreaker instance.
@@ -77,18 +93,6 @@ impl <P, R, E: Error> ThresholdBreaker<P, R, E> {
             threshold: if let Some(t) = threshold { t } else { 5 },
             timeout: if let Some(d) = timeout { d } else { Duration::new(5, 0) },
             time_of_tripping: None
-        }
-    }
-
-    /// Try to execute and count the failures here.
-    /// Any error returned by the embedded function will be propagated to the callee.
-    /// In addition CircuteBreakerError might be thrown.
-    pub fn call(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>> {
-        debug!("[CircuitBreaker::execute({})]", self.name);
-        match self.status {
-            CircuitState::Open => self.handle_open(parameter),
-            CircuitState::Close => self.handle_close(parameter),
-            CircuitState::HalfOpen => self.handle_half_open(parameter)
         }
     }
 

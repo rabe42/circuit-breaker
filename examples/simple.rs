@@ -1,5 +1,5 @@
 use env_logger;
-use circuit_breaker::ThresholdBreaker;
+use circuit_breaker::{CircuitBreaker, ThresholdBreaker};
 use log::{info};
 use std::time::Duration;
 use thiserror::Error;
