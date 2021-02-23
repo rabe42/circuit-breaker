@@ -24,31 +24,31 @@ fn action(should_fail: bool) -> Result<(), ActionError> {
 fn main() {
     env_logger::init();
 
-    let mut cb = ThresholdBreaker::new("simple", action, Some(1), Some(Duration::new(1, 0)));
+    let mut cb = ThresholdBreaker::new("simple", Some(1), Some(Duration::new(1, 0)));
     // Everything is fine
-    match cb.call(false) {
+    match cb.call(|| action(false)) {
         Ok(_) => info!("Everything is fine!"),
         Err(err) => panic!("Unexpected error: {}", err)
     }
     // One failure is no failure!
-    match cb.call(true) {
+    match cb.call(|| action(true)) {
         Ok(_) => panic!("Unexpected success!"),
         Err(_) => info!("First error on execute!")
     }
     // Now the threshold steps in!
-    match cb.call(true) {
+    match cb.call(|| action(true)) {
         Ok(_) => panic!("Unexpected success!"),
         Err(_) => info!("Second error, circuit should be open now!")
     }
     // Still in the within the timeout period! The successful function is not even called.
     for _i in 1..10 {
-        match cb.call(false) {
+        match cb.call(|| action(false)) {
             Ok(_) => panic!("Unexpected success!"),
             Err(_) => info!("Even the execution is now successful, we're still in open and get an error!")
         }
     }
     sleep(Duration::new(1,0));
-    match cb.call(false) {
+    match cb.call(|| action(false)) {
         Ok(_) => info!("Now everything is back to normal!"),
         Err(err) => panic!("Unexpected error: {}", err)
     }

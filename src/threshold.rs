@@ -10,11 +10,9 @@ use crate::CircuitBreakerError;
 /// The CircuitBreaker is implementing the protection pattern for distributed services.
 /// It is basically used in my case to protect the service from database failures.
 ///
-pub struct ThresholdBreaker<P, R, E: Error> {
+pub struct ThresholdBreaker {
     /// The name of this breaker to better identify it in the locks.
     name: String,
-    /// The function to be executed.
-    function: fn(P) -> Result<R, E>,
     /// The current count of failures. Will be resetted by success.
     failure_count: usize,
     /// The current state of the circuite breaker
@@ -26,20 +24,23 @@ pub struct ThresholdBreaker<P, R, E: Error> {
     /// The point in time, when the circuit was opened.
     time_of_tripping: Option<SystemTime>
 }
-impl <P, R, E:Error> CircuitBreaker<P, R, E>  for ThresholdBreaker<P, R, E>  {
+impl <F, R, E: Error> CircuitBreaker <F, R, E> for ThresholdBreaker
+    where F: FnOnce() -> Result<R, E>
+{
     /// Try to execute and count the failures here.
     /// Any error returned by the embedded function will be propagated to the callee.
     /// In addition CircuteBreakerError might be thrown.
-    fn call(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>> {
+    fn call(&mut self, f: F) -> Result<R, CircuitBreakerError<E>> {
         debug!("[CircuitBreaker::execute({})]", self.name);
         match self.status {
-            CircuitState::Open => self.handle_open(parameter),
-            CircuitState::Close => self.handle_close(parameter),
-            CircuitState::HalfOpen => self.handle_half_open(parameter)
+            CircuitState::Open => self.handle_open(f),
+            CircuitState::Close => self.handle_close(f),
+            CircuitState::HalfOpen => self.handle_half_open(f)
         }
     }
 }
-impl <P, R, E: Error> ThresholdBreaker<P, R, E> {
+impl ThresholdBreaker
+{
     /// Creates a new CircuitBreaker instance.
     /// @param name The name of the circuite breaker, for logging/debugging purposes.
     /// @param function The function, which will be wrapped by the circuit breaker.
@@ -47,15 +48,13 @@ impl <P, R, E: Error> ThresholdBreaker<P, R, E> {
     /// @param timeout The time before the circuit breaker isn't changing back to the close status.
     pub fn new(
         name: &str,
-        function: fn(P) -> Result<R, E>,
         threshold: Option<usize>,
-        timeout: Option<Duration>) -> ThresholdBreaker<P, R, E>
+        timeout: Option<Duration>) -> ThresholdBreaker
     {
         debug!("[CircuitBreaker::new({})]", name);
 
         ThresholdBreaker {
             name: String::from(name),
-            function,
             failure_count: 0,
             status: CircuitState::Close,
             threshold: if let Some(t) = threshold { t } else { 5 },
@@ -67,13 +66,15 @@ impl <P, R, E: Error> ThresholdBreaker<P, R, E> {
     /// Handle the case if the circuit is open (tripped).
     /// It just checks, if the time is up. If not, it just returns an CircuitBreakerError.
     /// Moves to HalfOpen and calling execute otherwise.
-    fn handle_open(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>> {
+    fn handle_open<F, R, E: Error>(&mut self, f: F) -> Result<R, CircuitBreakerError<E>>
+        where F: FnOnce() -> Result<R, E>
+    {
         debug!("[CircuitBreaker::handle_open({})]", self.name);
         let now = SystemTime::now();
         let time_of_tripping = if let Some(tot) = self.time_of_tripping { tot } else { now };
         if now > time_of_tripping + self.timeout {
             self.status = CircuitState::HalfOpen;
-            self.call(parameter)
+            self.call(f)
         }
         else {
             debug!("[CircuitBreaker::handle_open({})] stays open!", self.name);
@@ -85,9 +86,11 @@ impl <P, R, E: Error> ThresholdBreaker<P, R, E> {
     /// In this case it tries to execute the function with the provided parameters.
     /// If this fails, it will increase the failure counter, if the threshold reached,
     /// it will trip().
-    fn handle_close(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>> {
+    fn handle_close<F, R, E: Error>(&mut self, f: F) -> Result<R, CircuitBreakerError<E>>
+        where F: FnOnce() -> Result<R, E>
+    {
         debug!("[CircuitBreaker::handle_close({})]", self.name);
-        match (self.function)(parameter) {
+        match f() {
             Ok(result) => {
                 trace!("[CircuitBreaker::handle_close({})] Function called succssfully.", self.name);
                 self.reset();
@@ -108,9 +111,11 @@ impl <P, R, E: Error> ThresholdBreaker<P, R, E> {
     /// Handle the HalfOpen state. This is the state, after a Open state.
     /// It executes the function with the provided parameters. If this is successful,
     /// it goes to the close state. It trip() again otherwise.
-    fn handle_half_open(&mut self, parameter: P) -> Result<R, CircuitBreakerError<E>> {
+    fn handle_half_open<F, R, E: Error>(&mut self, f: F) -> Result<R, CircuitBreakerError<E>>
+        where F: FnOnce() -> Result<R, E>
+    {
         debug!("[CircuitBreaker::handle_half_open({})]", self.name);
-        match (self.function)(parameter) {
+        match f() {
             Ok(result) => {
                 info!("[CircuitBreaker::handle_half_open({})] Function called successfully.", self.name);
                 self.reset();
@@ -132,7 +137,7 @@ impl <P, R, E: Error> ThresholdBreaker<P, R, E> {
     }
 
     /// Setting the circuit breaker into the open state.
-    fn trip(&mut self, error: E) -> Result<R, CircuitBreakerError<E>> {
+    fn trip<R, E: Error>(&mut self, error: E) -> Result<R, CircuitBreakerError<E>> {
         error!("[CircuitBreaker::trip({})]", self.name);
         self.status = CircuitState::Open;
         self.time_of_tripping = Some(SystemTime::now());
@@ -168,15 +173,15 @@ mod tests {
 
     #[test]
     fn successful_execute() {
-        let mut cb = ThresholdBreaker::new("successful_execute", success, None, None);
-        match cb.call("Hello") {
+        let mut cb = ThresholdBreaker::new("successful_execute", None, None);
+        match cb.call(|| success("Hello")) {
             Ok(msg) => {
                 assert_eq!("Hello", msg);
                 assert_eq!(CircuitState::Close, cb.status);
             },
             Err(err) => panic!("Unexpected failure: {}!", err)
         }
-        match cb.call("World") {
+        match cb.call(|| success("World")) {
             Ok(msg) => assert_eq!("World", msg),
             Err(err) => panic!("Unexpected failure: {}!", err)
         }
@@ -184,41 +189,40 @@ mod tests {
 
     #[test]
     fn unsuccessful_execute() {
-        let mut cb = ThresholdBreaker::new("unsuccessful_execute", fail, None, None);
-        match cb.call(true) {
+        let mut cb = ThresholdBreaker::new("unsuccessful_execute", None, None);
+        match cb.call(|| fail(true)) {
             Ok(_) => panic!("Unexpected successful execution!"),
-            //Err(TestError::ExpectedFailure) => debug!("Expected failure!"),
             Err(error) => debug!("Expected error: {}", error)
         }
     }
 
     #[test]
     fn recover_execute() {
-        let mut cb = ThresholdBreaker::new("recover_execute", fail, Some(1), Some(Duration::new(1, 0)));
+        let mut cb = ThresholdBreaker::new("recover_execute", Some(1), Some(Duration::new(1, 0)));
         // Everything is fine
-        match cb.call(false) {
+        match cb.call(|| fail(false)) {
             Ok(_) => assert_eq!(CircuitState::Close, cb.status),
             Err(err) => panic!("Unexpected error: {}", err)
         }
         // One failure is no failure!
-        match cb.call(true) {
+        match cb.call(|| fail(true)) {
             Ok(_) => panic!("Unexpected success!"),
             Err(_) => assert_eq!(CircuitState::Close, cb.status)
         }
         // Now the threshold steps in!
-        match cb.call(true) {
+        match cb.call(|| fail(true)) {
             Ok(_) => panic!("Unexpected success!"),
             Err(_) => assert_eq!(CircuitState::Open, cb.status)
         }
         // Still in the within the timeout period! The successful function is not even called.
         for _i in 1..10 {
-            match cb.call(false) {
+            match cb.call(|| fail(false)) {
                 Ok(_) => panic!("Unexpected success!"),
                 Err(_) => assert_eq!(CircuitState::Open, cb.status)
             }
         }
         sleep(cb.timeout);
-        match cb.call(false) {
+        match cb.call(|| fail(false)) {
             Ok(_) => assert_eq!(CircuitState::Close, cb.status),
             Err(err) => panic!("Unexpected error: {}", err)
         }
