@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::time::{Duration, SystemTime};
-use log::{debug, warn, info, error, trace};
+use log::{debug, warn, error, trace};
 
 use crate::state::CircuitState;
 use crate::CircuitBreaker;
@@ -117,7 +117,7 @@ impl ThresholdBreaker
         debug!("[CircuitBreaker::handle_half_open({})]", self.name);
         match f() {
             Ok(result) => {
-                info!("[CircuitBreaker::handle_half_open({})] Function called successfully.", self.name);
+                debug!("[CircuitBreaker::handle_half_open({})] Function called successfully.", self.name);
                 self.reset();
                 Ok(result)
             }
@@ -130,7 +130,7 @@ impl ThresholdBreaker
 
     /// Resetting the failure count and setting the CircuitBreaker in close state.
     fn reset(&mut self) {
-        info!("[CircuitBreaker::reset({})]", self.name);
+        debug!("[CircuitBreaker::reset({})]", self.name);
         self.failure_count = 0;
         self.status = CircuitState::Close;
         self.time_of_tripping = None;
