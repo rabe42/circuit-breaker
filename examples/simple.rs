@@ -38,7 +38,7 @@ fn main() {
     // Now the threshold steps in!
     match cb.call(|| action(true)) {
         Ok(_) => panic!("Unexpected success!"),
-        Err(_) => info!("Second error, circuit should be open now!")
+        Err(err) => info!("Second error, circuit should be open now. Error: {}", err)
     }
     // Still in the within the timeout period! The successful function is not even called.
     for _i in 1..10 {

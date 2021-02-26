@@ -9,15 +9,14 @@ use thiserror::Error;
 pub enum CircuitBreakerError<E: Error> {
     /// Returned, if the wrapped function failed with an generic error.
     /// This error should be extracted, if of interest.
-    #[error("The wrapped function failed with.")]
+    #[error("The wrapped function failed with '{0}'.")]
     Failed(E),
     /// The name of the circuit breaker can be extracted from this error. It is returned,
     /// if the circuit breaker opens the connection.
-    #[error("The circuit breaker '{0}' tripped to open.")]
+    #[error("The circuit breaker '{0}' tripped to open due to '{1}'.")]
     Tripped(String, E),
     /// The name of the circuit breaker can be extracted from this error. It is returned,
     /// if the circuit breaker stays open.
     #[error("The circuit breaker '{0}' will stay open.")]
     StaysOpen(String)
 }
-
