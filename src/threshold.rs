@@ -9,6 +9,11 @@ use crate::CircuitBreakerError;
 ///
 /// The CircuitBreaker is implementing the protection pattern for distributed services.
 /// It is basically used in my case to protect the service from database failures.
+/// 
+/// ## Logging
+/// To track the behaviour of this circuit breaker, the logging level should be set to info.
+/// The error level will only log transfers to open, the warn level will warn about fails
+/// the info will log about going back to normal.
 ///
 pub struct ThresholdBreaker {
     /// The name of this breaker to better identify it in the locks.
