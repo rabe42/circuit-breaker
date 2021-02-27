@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::time::{Duration, SystemTime};
-use log::{debug, warn, error, trace};
+use log::{debug, warn, info, error, trace};
 
 use crate::state::CircuitState;
 use crate::CircuitBreaker;
@@ -116,7 +116,7 @@ impl ThresholdBreaker
         debug!("[CircuitBreaker::handle_half_open({})]", self.name);
         match f() {
             Ok(result) => {
-                debug!("[CircuitBreaker::handle_half_open({})] Function called successfully.", self.name);
+                info!("[CircuitBreaker::handle_half_open({})] Function called successfully back to close.", self.name);
                 self.reset();
                 Ok(result)
             }
