@@ -52,7 +52,6 @@ impl ThresholdBreaker
         timeout: Option<Duration>) -> ThresholdBreaker
     {
         debug!("[CircuitBreaker::new({})]", name);
-
         ThresholdBreaker {
             name: String::from(name),
             failure_count: 0,
